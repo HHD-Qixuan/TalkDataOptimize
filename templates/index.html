@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>LoRA数据集标注系统</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#4f46e5">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1><i class="fas fa-tags"></i> LoRA数据集标注系统</h1>
+            <p>标注高质量的训练数据，提升模型性能</p>
+        </header>
+
+        <nav>
+            <div class="nav-buttons">
+                <a href="/" class="btn btn-primary">
+                    <i class="fas fa-edit"></i> 标注界面
+                </a>
+                <a href="/preview" class="btn btn-secondary">
+                    <i class="fas fa-list"></i> 预览界面
+                </a>
+                <a href="/upload" class="btn btn-info">
+                    <i class="fas fa-upload"></i> 上传数据集
+                </a>
+            </div>
+        </nav>
+
+        <div class="main-content">
+            <aside class="sidebar">
+                <div class="stats">
+                    <h3><i class="fas fa-chart-bar"></i> 标注进度</h3>
+                    <div class="stat-item">
+                        <span>总样本数:</span>
+                        <span class="stat-value" id="total-samples">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span>已标注:</span>
+                        <span class="stat-value" id="annotated-samples">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span>已修改:</span>
+                        <span class="stat-value" id="modified-samples">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span>标注进度:</span>
+                        <span class="stat-value" id="progress-percent">0%</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress" id="progress-bar"></div>
+                    </div>
+                </div>
+
+                <div class="type-stats">
+                    <h3><i class="fas fa-chart-pie"></i> 标注分布</h3>
+                    <div class="stat-item">
+                        <span><span class="badge excellent">●</span> 极优:</span>
+                        <span class="stat-value" id="count-excellent">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span><span class="badge good">●</span> 次优:</span>
+                        <span class="stat-value" id="count-good">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span><span class="badge poor">●</span> 劣质:</span>
+                        <span class="stat-value" id="count-poor">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span><span class="badge discarded">●</span> 废弃:</span>
+                        <span class="stat-value" id="count-discarded">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span><span class="badge unannotated">●</span> 未标注:</span>
+                        <span class="stat-value" id="count-unannotated">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span><span class="badge annotated">●</span> 已标注:</span>
+                        <span class="stat-value" id="count-annotated">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span><span class="badge modified">●</span> 已修改:</span>
+                        <span class="stat-value" id="count-modified">0</span>
+                    </div>
+                </div>
+
+                <div class="annotation-controls">
+                    <button class="annotation-btn excellent" onclick="annotate('excellent')">
+                        <i class="fas fa-crown"></i> 极优
+                    </button>
+                    <button class="annotation-btn good" onclick="annotate('good')">
+                        <i class="fas fa-thumbs-up"></i> 次优
+                    </button>
+                    <button class="annotation-btn poor" onclick="annotate('poor')">
+                        <i class="fas fa-exclamation-triangle"></i> 劣质
+                    </button>
+                    <button class="annotation-btn discarded" onclick="annotate('discarded')">
+                        <i class="fas fa-trash"></i> 废弃
+                    </button>
+                </div>
+
+                <div class="output-controls">
+                    <button class="btn btn-success" onclick="saveOutput()" style="width: 100%; margin-bottom: 0.5rem;">
+                        <i class="fas fa-save"></i> 保存修改
+                    </button>
+                    <button class="reset-btn" onclick="resetOutput()" style="width: 100%;">
+                        <i class="fas fa-undo"></i> 还原为原始输出
+                    </button>
+                </div>
+
+                <div class="navigation-controls">
+                    <button class="btn btn-secondary" onclick="navigate('prev')">
+                        <i class="fas fa-arrow-left"></i> 上一条
+                    </button>
+                    <button class="btn btn-secondary" onclick="navigate('next')">
+                        下一条 <i class="fas fa-arrow-right"></i>
+                    </button>
+                </div>
+
+                <div class="jump-controls">
+                    <input type="number" id="jump-to" placeholder="跳转到样本ID" min="0" inputmode="numeric">
+                    <button class="btn btn-info" onclick="jumpToSample()">
+                        <i class="fas fa-forward"></i> 跳转
+                    </button>
+                </div>
+
+                <div class="export-controls">
+                    <h3><i class="fas fa-download"></i> 导出选项</h3>
+                    <select id="export-type">
+                        <option value="all">导出所有（除废弃）</option>
+                        <option value="excellent">仅导出极优</option>
+                        <option value="good">仅导出次优</option>
+                        <option value="poor">仅导出劣质</option>
+                    </select>
+                    <button class="btn btn-success" onclick="exportAnnotations()">
+                        <i class="fas fa-file-export"></i> 导出标注结果
+                    </button>
+                </div>
+            </aside>
+
+            <main class="content-area">
+                <div class="sample-header">
+                    <h2>当前标注样本</h2>
+                    <div class="current-position">
+                        <span id="current-position">0/0</span>
+                    </div>
+                </div>
+
+                <!-- 在sample-info部分，修改质量标签的ID -->
+                <div class="sample-info">
+                    <h3><i class="fas fa-info-circle"></i> 样本信息</h3>
+                    <p><strong>质量标注:</strong> <span id="current-quality" class="annotation-badge">未标注</span></p>
+                    <p><strong>是否已修改:</strong> <span id="modified-status">否</span></p>
+                    <p><strong>是否已标注:</strong> <span id="annotated-status">否</span></p>
+                    <p><strong>样本ID:</strong> <span id="sample-id">0</span></p>
+                </div>
+
+                <div class="history-section">
+                    <div class="section-header">
+                        <h3><i class="fas fa-history"></i> 对话历史</h3>
+                        <span class="turn-count">共 <span id="turn-count">0</span> 轮对话</span>
+                    </div>
+                    <div class="history-container" id="history-container">
+                        <!-- 对话历史会动态加载到这里 -->
+                    </div>
+                </div>
+
+                <div class="input-section">
+                    <div class="section-header">
+                        <h3><i class="fas fa-keyboard"></i> 输入</h3>
+                    </div>
+                    <div class="input-container">
+                        <div class="input-content" id="input-content">
+                            <!-- Input内容会加载到这里 -->
+                        </div>
+                    </div>
+                </div>
+
+                <div class="output-section">
+                    <div class="section-header">
+                        <h3><i class="fas fa-comment-dots"></i> 输出 <small>(可编辑)</small></h3>
+                    </div>
+                    <div class="output-container">
+                        <textarea
+                            class="output-editor"
+                            id="output-editor"
+                            placeholder="在此编辑输出内容..."
+                            spellcheck="false"
+                            autocapitalize="none"
+                            autocomplete="off"
+                            autocorrect="off"></textarea>
+                        <div class="editor-info">
+                            <small><i class="fas fa-lightbulb"></i> 提示：劣质样本往往是因为上下文崩溃导致的，修改输出可以提高数据质量</small>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mobile-tips" style="margin-top: 1rem; padding: 0.75rem; background: #f0f9ff; border-radius: 8px; border-left: 4px solid #0ea5e9; display: none;">
+                    <p style="margin: 0; font-size: 0.8rem; color: #0369a1;">
+                        <i class="fas fa-mobile-alt"></i>
+                        <strong>移动端提示：</strong>
+                        左右滑动可以切换样本，点击按钮直接操作
+                    </p>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <script>
+        // 检测移动设备并显示提示
+        if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+            document.querySelector('.mobile-tips').style.display = 'block';
+        }
+
+        // 页面加载时初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.has('jump')) {
+                navigate(urlParams.get('jump'));
+            } else {
+                loadCurrentSample();
+            }
+        });
+    </script>
+</body>
+</html>

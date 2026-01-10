@@ -1,0 +1,1164 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>数据预览 - LoRA标注系统</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        /* 添加快速操作样式 */
+        .quick-actions {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .quick-action-btn {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: #f3f4f6;
+            color: #374151;
+        }
+
+        .quick-action-btn:hover {
+            background: #e5e7eb;
+            transform: translateY(-1px);
+        }
+
+        .quick-action-btn.active {
+            background: #4f46e5;
+            color: white;
+        }
+
+        .quick-action-btn.excellent.active { background: #10b981; }
+        .quick-action-btn.good.active { background: #3b82f6; }
+        .quick-action-btn.poor.active { background: #f59e0b; }
+        .quick-action-btn.discarded.active { background: #6b7280; }
+        .quick-action-btn.modified.active { background: #8b5cf6; }
+        .quick-action-btn.annotated.active { background: #0ea5e9; }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            gap: 0.5rem;
+            margin-top: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .page-btn {
+            padding: 0.5rem 0.75rem;
+            border: 1px solid #d1d5db;
+            background: white;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+
+        .page-btn.active {
+            background: #4f46e5;
+            color: white;
+            border-color: #4f46e5;
+        }
+
+        .page-btn:hover:not(.active) {
+            background: #f3f4f6;
+        }
+
+        .page-info {
+            text-align: center;
+            margin-top: 0.5rem;
+            color: #6b7280;
+            font-size: 0.9rem;
+        }
+
+        /* 优化卡片样式 */
+        .preview-card {
+            position: relative;
+            transition: all 0.2s ease;
+        }
+
+        .preview-card.updating {
+            opacity: 0.7;
+            pointer-events: none;
+        }
+
+        .card-update-indicator {
+            position: absolute;
+            top: 0;
+            right: 0;
+            padding: 0.25rem 0.5rem;
+            background: rgba(79, 70, 229, 0.1);
+            color: #4f46e5;
+            font-size: 0.7rem;
+            border-radius: 0 8px 0 4px;
+            display: none;
+        }
+
+        .preview-card.updating .card-update-indicator {
+            display: block;
+        }
+
+        .status-indicators {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .status-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.125rem 0.5rem;
+            border-radius: 12px;
+            font-size: 0.7rem;
+            font-weight: 500;
+        }
+
+        .status-indicator.modified {
+            background: #ede9fe;
+            color: #5b21b6;
+        }
+
+        .status-indicator.annotated {
+            background: #e0f2fe;
+            color: #0369a1;
+        }
+
+        /* 输出编辑器优化 */
+        .output-editor-preview {
+            min-height: 80px;
+            max-height: 150px;
+            font-size: 0.85rem;
+            line-height: 1.4;
+            padding: 0.5rem;
+        }
+
+        .history-preview {
+            max-height: 100px;
+            min-height: 60px;
+            font-size: 0.8rem;
+            line-height: 1.3;
+            padding: 0.5rem;
+        }
+
+        /* 批量操作 */
+        .batch-actions {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .batch-select {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem;
+            background: #f9fafb;
+            border-radius: 6px;
+        }
+
+        .batch-checkbox {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
+        /* 滚动到顶部按钮 */
+        .scroll-to-top {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 40px;
+            height: 40px;
+            background: #4f46e5;
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+            z-index: 100;
+            transition: all 0.2s ease;
+        }
+
+        .scroll-to-top:hover {
+            background: #4338ca;
+            transform: translateY(-2px);
+        }
+
+        /* 搜索结果高亮 */
+        .search-highlight {
+            background: #fef3c7;
+            padding: 0.125rem 0.25rem;
+            border-radius: 2px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1><i class="fas fa-list"></i> 数据预览与批量修改</h1>
+            <p>快速高效地批量标注和修改数据</p>
+        </header>
+
+        <nav>
+            <div class="nav-buttons">
+                <a href="/" class="btn btn-secondary">
+                    <i class="fas fa-edit"></i> 标注界面
+                </a>
+                <a href="/preview" class="btn btn-primary">
+                    <i class="fas fa-list"></i> 预览界面
+                </a>
+                <a href="/upload" class="btn btn-info">
+                    <i class="fas fa-upload"></i> 上传数据集
+                </a>
+            </div>
+        </nav>
+
+        <div class="preview-container">
+            <!-- 快速操作栏 -->
+            <div class="quick-actions">
+                <button class="quick-action-btn active" onclick="filterSamples('all')">
+                    全部
+                </button>
+                <button class="quick-action-btn" onclick="filterSamples('unannotated')">
+                    未标注
+                </button>
+                <button class="quick-action-btn excellent" onclick="filterSamples('excellent')">
+                    极优
+                </button>
+                <button class="quick-action-btn good" onclick="filterSamples('good')">
+                    次优
+                </button>
+                <button class="quick-action-btn poor" onclick="filterSamples('poor')">
+                    劣质
+                </button>
+                <button class="quick-action-btn discarded" onclick="filterSamples('discarded')">
+                    废弃
+                </button>
+                <button class="quick-action-btn annotated" onclick="filterSamples('annotated')">
+                    已标注
+                </button>
+                <button class="quick-action-btn modified" onclick="filterSamples('modified')">
+                    已修改
+                </button>
+            </div>
+
+            <!-- 搜索框 -->
+            <div class="search-box" style="margin-bottom: 1rem;">
+                <input type="text"
+                       id="search-input"
+                       placeholder="搜索对话内容或输出..."
+                       style="width: 100%; padding: 0.75rem; border: 2px solid #d1d5db; border-radius: 8px; font-size: 0.9rem;"
+                       onkeyup="searchSamples()">
+            </div>
+
+            <!-- 批量操作 -->
+            <div class="batch-actions" id="batch-actions" style="display: none;">
+                <div class="batch-select">
+                    <input type="checkbox" id="select-all" class="batch-checkbox" onchange="toggleSelectAll()">
+                    <span id="selected-count">已选择 0 项</span>
+                </div>
+                <button class="btn btn-sm btn-success" onclick="batchAnnotate('excellent')">
+                    <i class="fas fa-crown"></i> 批量标为极优
+                </button>
+                <button class="btn btn-sm btn-info" onclick="batchAnnotate('good')">
+                    <i class="fas fa-thumbs-up"></i> 批量标为次优
+                </button>
+                <button class="btn btn-sm btn-warning" onclick="batchAnnotate('poor')">
+                    <i class="fas fa-exclamation-triangle"></i> 批量标为劣质
+                </button>
+                <button class="btn btn-sm btn-secondary" onclick="batchAnnotate('discarded')">
+                    <i class="fas fa-trash"></i> 批量标为废弃
+                </button>
+                <button class="btn btn-sm btn-danger" onclick="clearBatchSelection()">
+                    <i class="fas fa-times"></i> 清除选择
+                </button>
+            </div>
+
+            <!-- 预览网格 -->
+            <div class="preview-grid" id="preview-grid">
+                <!-- 卡片会动态加载 -->
+            </div>
+
+            <!-- 分页 -->
+            <div class="pagination" id="pagination">
+                <!-- 分页按钮会动态生成 -->
+            </div>
+
+            <div class="page-info">
+                显示 <span id="showing-count">0</span> 个项目，共 <span id="total-count">0</span> 个项目
+            </div>
+        </div>
+    </div>
+
+    <!-- 历史对话预览模态框 -->
+    <div id="history-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-history"></i> 对话历史详情</h3>
+                <button class="close-modal" onclick="closeHistoryModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="modal-history-container" id="modal-history-container">
+                    <!-- 历史对话会动态加载 -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 滚动到顶部按钮 -->
+    <div class="scroll-to-top" id="scroll-to-top" onclick="scrollToTop()" style="display: none;">
+        <i class="fas fa-arrow-up"></i>
+    </div>
+
+    <script>
+        // 全局变量
+        let currentFilter = 'all';
+        let currentPage = 1;
+        let totalPages = 1;
+        let perPage = 50; // 每页显示数量
+        let isLoading = false;
+        let selectedItems = new Set(); // 批量选择的项目
+        let searchTimer = null;
+
+        // 检测移动设备
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+        // 过滤样本
+        function filterSamples(filterType, page = 1) {
+            currentFilter = filterType;
+            currentPage = page;
+
+            // 更新按钮状态
+            document.querySelectorAll('.quick-action-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+
+            // 清除批量选择
+            clearBatchSelection();
+
+            // 加载数据
+            loadPreviewData();
+        }
+
+        // 加载预览数据
+        function loadPreviewData() {
+            if (isLoading) return;
+
+            isLoading = true;
+            showLoading(true);
+
+            const grid = document.getElementById('preview-grid');
+            grid.innerHTML = '<div class="loading-placeholder" style="text-align: center; padding: 2rem; color: #6b7280;">加载中...</div>';
+
+            fetch(`/api/preview/filter?filter=${currentFilter}&page=${currentPage}&per_page=${perPage}`)
+                .then(response => response.json())
+                .then(data => {
+                    isLoading = false;
+                    showLoading(false);
+
+                    renderPreviewGrid(data.items);
+                    updatePagination(data.page, data.total_pages, data.total);
+                    updateStatistics();
+
+                    // 显示滚动到顶部按钮
+                    const scrollBtn = document.getElementById('scroll-to-top');
+                    if (window.scrollY > 300) {
+                        scrollBtn.style.display = 'flex';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading preview data:', error);
+                    showStatus('加载数据失败，请检查网络连接', 'error');
+                    isLoading = false;
+                    showLoading(false);
+                });
+        }
+
+        // 渲染预览网格
+        function renderPreviewGrid(items) {
+            const grid = document.getElementById('preview-grid');
+
+            if (!items || items.length === 0) {
+                grid.innerHTML = '<div class="empty-state" style="text-align: center; padding: 3rem; color: #6b7280;">没有找到符合条件的样本</div>';
+                return;
+            }
+
+            grid.innerHTML = '';
+
+            items.forEach(item => {
+                const card = document.createElement('div');
+                card.className = `preview-card ${item.quality}`;
+                card.dataset.id = item.id;
+
+                // 获取对话历史预览
+                const historyPreview = formatHistoryPreview(item.history);
+
+                // 格式化时间
+                let lastUpdate = '未更新';
+                if (item.modify_timestamp) {
+                    lastUpdate = `修改: ${formatTime(item.modify_timestamp)}`;
+                } else if (item.annotate_timestamp) {
+                    lastUpdate = `标注: ${formatTime(item.annotate_timestamp)}`;
+                }
+
+                card.innerHTML = `
+                    <div class="card-update-indicator">
+                        <i class="fas fa-spinner fa-spin"></i> 更新中
+                    </div>
+
+                    <div class="card-header">
+                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                            <input type="checkbox" class="batch-checkbox card-select"
+                                   onchange="toggleItemSelection(${item.id})"
+                                   ${selectedItems.has(item.id) ? 'checked' : ''}>
+                            <span class="sample-id">ID: ${item.id}</span>
+                        </div>
+                        <div>
+                            <span class="annotation-badge">${getQualityText(item.quality)}</span>
+                        </div>
+                    </div>
+
+                    <div class="status-indicators">
+                        ${item.is_modified ? '<span class="status-indicator modified"><i class="fas fa-edit"></i> 已修改</span>' : ''}
+                        ${item.is_annotated ? '<span class="status-indicator annotated"><i class="fas fa-tag"></i> 已标注</span>' : ''}
+                    </div>
+
+                    <div class="preview-section">
+                        <h4><i class="fas fa-history"></i> 对话历史预览</h4>
+                        <div class="history-preview" onclick="showHistory(${item.id})" style="cursor: pointer;">
+                            ${escapeHtml(historyPreview)}
+                        </div>
+                    </div>
+
+                    <div class="preview-section">
+                        <h4><i class="fas fa-comment-dots"></i> 输出内容</h4>
+                        <div class="output-edit-container">
+                            <textarea
+                                class="output-editor-preview"
+                                id="output-editor-${item.id}"
+                                placeholder="在此编辑输出内容..."
+                                spellcheck="false"
+                                oninput="autoResizeTextarea(this)"
+                                data-original="${escapeHtml(item.output)}">${escapeHtml(item.output)}</textarea>
+                        </div>
+                    </div>
+
+                    <div class="card-actions">
+                        <button class="action-btn excellent" onclick="quickAnnotate(${item.id}, 'excellent')">
+                            <i class="fas fa-crown"></i> 极优
+                        </button>
+                        <button class="action-btn good" onclick="quickAnnotate(${item.id}, 'good')">
+                            <i class="fas fa-thumbs-up"></i> 次优
+                        </button>
+                        <button class="action-btn poor" onclick="quickAnnotate(${item.id}, 'poor')">
+                            <i class="fas fa-exclamation-triangle"></i> 劣质
+                        </button>
+                        <button class="action-btn discarded" onclick="quickAnnotate(${item.id}, 'discarded')">
+                            <i class="fas fa-trash"></i> 废弃
+                        </button>
+                        <button class="action-btn save" onclick="saveOutput(${item.id})">
+                            <i class="fas fa-save"></i> 保存
+                        </button>
+                        <button class="action-btn reset" onclick="resetOutput(${item.id})">
+                            <i class="fas fa-undo"></i> 还原
+                        </button>
+                    </div>
+
+                    <div class="card-footer">
+                        ${lastUpdate}
+                    </div>
+                `;
+
+                grid.appendChild(card);
+            });
+        }
+
+        // 自动调整文本域高度
+        function autoResizeTextarea(textarea) {
+            textarea.style.height = 'auto';
+            textarea.style.height = textarea.scrollHeight + 'px';
+        }
+
+        // 快速标注（无确认，无刷新整个列表）
+        function quickAnnotate(itemId, qualityType) {
+            const card = document.querySelector(`.preview-card[data-id="${itemId}"]`);
+            if (!card) return;
+
+            // 显示更新状态
+            card.classList.add('updating');
+
+            fetch('/api/preview/annotate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    item_id: itemId,
+                    quality_type: qualityType
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                card.classList.remove('updating');
+
+                if (data.success) {
+                    // 更新卡片状态
+                    updateCardState(itemId, data.item);
+
+                    // 显示成功消息
+                    showQuickStatus(`样本 ${itemId} 已标记为${getQualityText(qualityType)}`, 'success');
+
+                    // 更新统计
+                    updateStatistics();
+                } else {
+                    showStatus(data.error || '标注失败', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error annotating:', error);
+                card.classList.remove('updating');
+                showStatus('标注失败，请检查网络连接', 'error');
+            });
+        }
+
+        // 保存输出（无确认，无刷新整个列表）
+        function saveOutput(itemId) {
+            const card = document.querySelector(`.preview-card[data-id="${itemId}"]`);
+            if (!card) return;
+
+            const outputEditor = document.getElementById(`output-editor-${itemId}`);
+            if (!outputEditor) {
+                showStatus('找不到输出编辑器', 'error');
+                return;
+            }
+
+            const newOutput = outputEditor.value;
+            if (!newOutput.trim()) {
+                showStatus('输出内容不能为空', 'error');
+                return;
+            }
+
+            // 显示更新状态
+            card.classList.add('updating');
+
+            fetch('/api/preview/save_output', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    item_id: itemId,
+                    output: newOutput
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                card.classList.remove('updating');
+
+                if (data.success) {
+                    // 更新卡片状态
+                    updateCardState(itemId, data.item);
+
+                    // 显示成功消息
+                    showQuickStatus(`样本 ${itemId} 输出已保存`, 'success');
+
+                    // 更新统计
+                    updateStatistics();
+                } else {
+                    showStatus(data.error || '保存失败', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error saving output:', error);
+                card.classList.remove('updating');
+                showStatus('保存失败，请检查网络连接', 'error');
+            });
+        }
+
+        // 重置输出（有确认）
+        function resetOutput(itemId) {
+            if (!confirm('确定要重置输出到原始状态吗？')) {
+                return;
+            }
+
+            const card = document.querySelector(`.preview-card[data-id="${itemId}"]`);
+            if (!card) return;
+
+            // 显示更新状态
+            card.classList.add('updating');
+
+            fetch('/api/preview/reset_output', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    item_id: itemId
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                card.classList.remove('updating');
+
+                if (data.success) {
+                    // 更新卡片状态和输出内容
+                    updateCardState(itemId, data.item);
+
+                    // 更新文本域内容
+                    const outputEditor = document.getElementById(`output-editor-${itemId}`);
+                    if (outputEditor) {
+                        outputEditor.value = data.item.output;
+                        autoResizeTextarea(outputEditor);
+                    }
+
+                    // 显示成功消息
+                    showQuickStatus(`样本 ${itemId} 输出已重置`, 'success');
+
+                    // 更新统计
+                    updateStatistics();
+                } else {
+                    showStatus(data.error || '重置失败', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error resetting output:', error);
+                card.classList.remove('updating');
+                showStatus('重置失败，请检查网络连接', 'error');
+            });
+        }
+
+        // 更新卡片状态
+        function updateCardState(itemId, itemData) {
+            const card = document.querySelector(`.preview-card[data-id="${itemId}"]`);
+            if (!card || !itemData) return;
+
+            // 更新质量标签
+            if (itemData.quality) {
+                const badge = card.querySelector('.annotation-badge');
+                if (badge) {
+                    badge.textContent = getQualityText(itemData.quality);
+                    badge.className = 'annotation-badge ' + itemData.quality;
+                }
+
+                // 更新卡片颜色
+                card.className = `preview-card ${itemData.quality} updating`;
+                setTimeout(() => card.classList.remove('updating'), 300);
+            }
+
+            // 更新状态指示器
+            const statusContainer = card.querySelector('.status-indicators');
+            if (statusContainer) {
+                let statusHtml = '';
+                if (itemData.is_modified) {
+                    statusHtml += '<span class="status-indicator modified"><i class="fas fa-edit"></i> 已修改</span>';
+                }
+                if (itemData.is_annotated) {
+                    statusHtml += '<span class="status-indicator annotated"><i class="fas fa-tag"></i> 已标注</span>';
+                }
+                statusContainer.innerHTML = statusHtml;
+            }
+
+            // 如果当前过滤器不匹配，可能需要移除卡片
+            if (!matchesCurrentFilter(itemData)) {
+                setTimeout(() => {
+                    card.style.opacity = '0';
+                    card.style.transform = 'translateX(-20px)';
+                    setTimeout(() => {
+                        if (card.parentNode) {
+                            card.parentNode.removeChild(card);
+                        }
+                    }, 300);
+                }, 500);
+            }
+        }
+
+        // 检查项目是否匹配当前过滤器
+        function matchesCurrentFilter(item) {
+            if (currentFilter === 'all') return true;
+            if (currentFilter === 'unannotated') return !item.is_annotated;
+            if (currentFilter === 'excellent') return item.quality === 'excellent';
+            if (currentFilter === 'good') return item.quality === 'good';
+            if (currentFilter === 'poor') return item.quality === 'poor';
+            if (currentFilter === 'discarded') return item.quality === 'discarded';
+            if (currentFilter === 'modified') return item.is_modified;
+            if (currentFilter === 'annotated') return item.is_annotated;
+            return true;
+        }
+
+        // 显示历史对话
+        function showHistory(itemId) {
+            fetch(`/api/preview/item/${itemId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        showStatus(data.error, 'error');
+                        return;
+                    }
+
+                    const historyContainer = document.getElementById('modal-history-container');
+                    historyContainer.innerHTML = '';
+
+                    if (data.history && Array.isArray(data.history)) {
+                        data.history.forEach((turn, index) => {
+                            const turnDiv = document.createElement('div');
+                            turnDiv.className = 'modal-turn';
+
+                            const userContent = Array.isArray(turn) ? turn[0] : turn.user || '';
+                            const assistantContent = Array.isArray(turn) ? turn[1] : turn.assistant || '';
+
+                            turnDiv.innerHTML = `
+                                <div class="modal-turn-header">
+                                    <i class="fas fa-user"></i> 用户 (轮次 ${index + 1})
+                                </div>
+                                <div class="modal-turn-content">${escapeHtml(userContent)}</div>
+                                <div class="modal-turn-header">
+                                    <i class="fas fa-robot"></i> 助手 (轮次 ${index + 1})
+                                </div>
+                                <div class="modal-turn-content">${escapeHtml(assistantContent)}</div>
+                            `;
+                            historyContainer.appendChild(turnDiv);
+                        });
+                    } else {
+                        historyContainer.innerHTML = '<p style="text-align: center; color: #6b7280; padding: 2rem;">无对话历史</p>';
+                    }
+
+                    document.getElementById('history-modal').style.display = 'block';
+                })
+                .catch(error => {
+                    console.error('Error fetching sample:', error);
+                    showStatus('获取样本信息失败', 'error');
+                });
+        }
+
+        // 关闭历史模态框
+        function closeHistoryModal() {
+            document.getElementById('history-modal').style.display = 'none';
+        }
+
+        // 更新分页
+        function updatePagination(page, totalPages, totalCount) {
+            const pagination = document.getElementById('pagination');
+            const showingCount = document.getElementById('showing-count');
+            const totalCountSpan = document.getElementById('total-count');
+
+            showingCount.textContent = Math.min(perPage, totalCount);
+            totalCountSpan.textContent = totalCount;
+
+            if (totalPages <= 1) {
+                pagination.innerHTML = '';
+                return;
+            }
+
+            let html = '';
+
+            // 上一页按钮
+            if (page > 1) {
+                html += `<button class="page-btn" onclick="filterSamples('${currentFilter}', ${page - 1})">&laquo; 上一页</button>`;
+            }
+
+            // 页码按钮
+            const maxPages = 7;
+            let startPage = Math.max(1, page - Math.floor(maxPages / 2));
+            let endPage = Math.min(totalPages, startPage + maxPages - 1);
+
+            if (endPage - startPage + 1 < maxPages) {
+                startPage = Math.max(1, endPage - maxPages + 1);
+            }
+
+            for (let i = startPage; i <= endPage; i++) {
+                if (i === page) {
+                    html += `<button class="page-btn active">${i}</button>`;
+                } else {
+                    html += `<button class="page-btn" onclick="filterSamples('${currentFilter}', ${i})">${i}</button>`;
+                }
+            }
+
+            // 下一页按钮
+            if (page < totalPages) {
+                html += `<button class="page-btn" onclick="filterSamples('${currentFilter}', ${page + 1})">下一页 &raquo;</button>`;
+            }
+
+            pagination.innerHTML = html;
+        }
+
+        // 更新统计信息
+        function updateStatistics() {
+            fetch('/api/statistics')
+                .then(response => response.json())
+                .then(data => {
+                    // 可以在这里更新统计显示
+                })
+                .catch(error => console.error('Error updating statistics:', error));
+        }
+
+        // 搜索样本
+        function searchSamples() {
+            clearTimeout(searchTimer);
+            searchTimer = setTimeout(() => {
+                const searchTerm = document.getElementById('search-input').value.toLowerCase().trim();
+
+                if (!searchTerm) {
+                    loadPreviewData();
+                    return;
+                }
+
+                const cards = document.querySelectorAll('.preview-card');
+                let matchCount = 0;
+
+                cards.forEach(card => {
+                    const historyElement = card.querySelector('.history-preview');
+                    const outputElement = card.querySelector('.output-editor-preview');
+
+                    const historyText = historyElement ? historyElement.textContent.toLowerCase() : '';
+                    const outputText = outputElement ? outputElement.value.toLowerCase() : '';
+
+                    if (historyText.includes(searchTerm) || outputText.includes(searchTerm)) {
+                        card.style.display = 'block';
+                        matchCount++;
+
+                        // 高亮搜索词
+                        if (historyElement && historyText.includes(searchTerm)) {
+                            historyElement.innerHTML = highlightText(historyElement.textContent, searchTerm);
+                        }
+                        if (outputElement && outputText.includes(searchTerm)) {
+                            outputElement.innerHTML = highlightText(outputElement.value, searchTerm);
+                        }
+                    } else {
+                        card.style.display = 'none';
+                    }
+                });
+
+                document.getElementById('showing-count').textContent = matchCount;
+            }, 300);
+        }
+
+        // 高亮文本
+        function highlightText(text, term) {
+            const regex = new RegExp(`(${term})`, 'gi');
+            return text.replace(regex, '<span class="search-highlight">$1</span>');
+        }
+
+        // 批量选择功能
+        function toggleItemSelection(itemId) {
+            if (selectedItems.has(itemId)) {
+                selectedItems.delete(itemId);
+            } else {
+                selectedItems.add(itemId);
+            }
+
+            updateBatchActions();
+        }
+
+        function toggleSelectAll() {
+            const selectAll = document.getElementById('select-all');
+            const checkboxes = document.querySelectorAll('.card-select');
+
+            if (selectAll.checked) {
+                checkboxes.forEach(checkbox => {
+                    const itemId = parseInt(checkbox.closest('.preview-card').dataset.id);
+                    selectedItems.add(itemId);
+                    checkbox.checked = true;
+                });
+            } else {
+                selectedItems.clear();
+                checkboxes.forEach(checkbox => checkbox.checked = false);
+            }
+
+            updateBatchActions();
+        }
+
+        function updateBatchActions() {
+            const batchActions = document.getElementById('batch-actions');
+            const selectedCount = document.getElementById('selected-count');
+
+            selectedCount.textContent = `已选择 ${selectedItems.size} 项`;
+
+            if (selectedItems.size > 0) {
+                batchActions.style.display = 'flex';
+            } else {
+                batchActions.style.display = 'none';
+            }
+        }
+
+        function clearBatchSelection() {
+            selectedItems.clear();
+            document.querySelectorAll('.card-select').forEach(cb => cb.checked = false);
+            document.getElementById('select-all').checked = false;
+            updateBatchActions();
+        }
+
+        function batchAnnotate(qualityType) {
+            if (selectedItems.size === 0) return;
+
+            if (!confirm(`确定要将选中的 ${selectedItems.size} 个项目标记为${getQualityText(qualityType)}吗？`)) {
+                return;
+            }
+
+            const promises = Array.from(selectedItems).map(itemId =>
+                fetch('/api/preview/annotate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        item_id: itemId,
+                        quality_type: qualityType
+                    })
+                }).then(response => response.json())
+            );
+
+            Promise.all(promises)
+                .then(results => {
+                    let successCount = 0;
+                    let errorCount = 0;
+
+                    results.forEach((result, index) => {
+                        if (result.success) {
+                            successCount++;
+                            const itemId = Array.from(selectedItems)[index];
+                            updateCardState(itemId, result.item);
+                        } else {
+                            errorCount++;
+                        }
+                    });
+
+                    showQuickStatus(`批量标注完成：成功 ${successCount} 个，失败 ${errorCount} 个`,
+                                  errorCount === 0 ? 'success' : 'warning');
+
+                    // 清除选择
+                    clearBatchSelection();
+                    updateStatistics();
+                })
+                .catch(error => {
+                    console.error('Batch annotate error:', error);
+                    showStatus('批量标注失败', 'error');
+                });
+        }
+
+        // 滚动到顶部
+        function scrollToTop() {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // 显示快速状态消息（不阻塞界面）
+        function showQuickStatus(message, type = 'info') {
+            const statusDiv = document.createElement('div');
+            statusDiv.className = `status-message ${type}`;
+            statusDiv.textContent = message;
+            statusDiv.style.position = 'fixed';
+            statusDiv.style.top = '20px';
+            statusDiv.style.right = '20px';
+            statusDiv.style.zIndex = '1000';
+
+            document.body.appendChild(statusDiv);
+
+            setTimeout(() => {
+                statusDiv.style.opacity = '0';
+                statusDiv.style.transform = 'translateX(100%)';
+                setTimeout(() => {
+                    if (statusDiv.parentNode) {
+                        statusDiv.parentNode.removeChild(statusDiv);
+                    }
+                }, 300);
+            }, 1500);
+        }
+
+        // 辅助函数
+        function formatHistoryPreview(history) {
+            if (!history || !Array.isArray(history)) return '无对话历史';
+
+            let preview = '';
+            const maxTurns = Math.min(history.length, 2); // 只显示2轮
+
+            for (let i = 0; i < maxTurns; i++) {
+                const turn = history[i];
+                const user = Array.isArray(turn) ? turn[0] : turn.user || '';
+                const assistant = Array.isArray(turn) ? turn[1] : turn.assistant || '';
+
+                preview += `[${i+1}] 用户: ${user.substring(0, 30)}${user.length > 30 ? '...' : ''}\n`;
+                preview += `     助手: ${assistant.substring(0, 30)}${assistant.length > 30 ? '...' : ''}\n\n`;
+            }
+
+            if (history.length > 2) {
+                preview += `...还有 ${history.length - 2} 轮对话`;
+            }
+
+            return preview;
+        }
+
+        function getQualityText(type) {
+            const map = {
+                'unannotated': '未标注',
+                'excellent': '极优',
+                'good': '次优',
+                'poor': '劣质',
+                'discarded': '废弃'
+            };
+            return map[type] || type;
+        }
+
+        function formatTime(timestamp) {
+            if (!timestamp) return '';
+            const date = new Date(timestamp);
+            const now = new Date();
+            const diffMs = now - date;
+            const diffMins = Math.floor(diffMs / 60000);
+
+            if (diffMins < 1) return '刚刚';
+            if (diffMins < 60) return `${diffMins}分钟前`;
+            if (diffMins < 1440) return `${Math.floor(diffMins / 60)}小时前`;
+            return date.toLocaleDateString('zh-CN');
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function showLoading(show) {
+            // 简单的加载指示器
+            if (show && !document.getElementById('global-loading')) {
+                const loading = document.createElement('div');
+                loading.id = 'global-loading';
+                loading.style.cssText = `
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 3px;
+                    background: linear-gradient(90deg, #4f46e5, #7c3aed);
+                    z-index: 9999;
+                    animation: loading 2s infinite;
+                `;
+                document.body.appendChild(loading);
+            } else if (!show && document.getElementById('global-loading')) {
+                document.getElementById('global-loading').remove();
+            }
+        }
+
+        // 页面加载时初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            loadPreviewData();
+
+            // 监听滚动事件
+            window.addEventListener('scroll', function() {
+                const scrollBtn = document.getElementById('scroll-to-top');
+                if (window.scrollY > 300) {
+                    scrollBtn.style.display = 'flex';
+                } else {
+                    scrollBtn.style.display = 'none';
+                }
+
+                // 滚动加载更多（无限滚动）
+                if (!isLoading && currentPage < totalPages) {
+                    const scrollPosition = window.innerHeight + window.scrollY;
+                    const pageHeight = document.documentElement.scrollHeight - 100;
+
+                    if (scrollPosition >= pageHeight) {
+                        currentPage++;
+                        loadMoreData();
+                    }
+                }
+            });
+
+            // 监听键盘快捷键
+            document.addEventListener('keydown', function(e) {
+                // 阻止在输入框中触发
+                if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') {
+                    return;
+                }
+
+                // 数字键快速标注
+                if (e.key >= '1' && e.key <= '4') {
+                    e.preventDefault();
+                    const qualityMap = { '1': 'excellent', '2': 'good', '3': 'poor', '4': 'discarded' };
+                    const qualityType = qualityMap[e.key];
+
+                    // 获取当前聚焦的卡片
+                    const focusedCard = document.querySelector('.preview-card:focus-within');
+                    if (focusedCard) {
+                        const itemId = parseInt(focusedCard.dataset.id);
+                        quickAnnotate(itemId, qualityType);
+                    }
+                }
+
+                // Ctrl+S 保存当前聚焦的输出
+                if (e.key === 's' && (e.ctrlKey || e.metaKey)) {
+                    e.preventDefault();
+                    const focusedTextarea = document.querySelector('.output-editor-preview:focus');
+                    if (focusedTextarea) {
+                        const itemId = parseInt(focusedTextarea.id.replace('output-editor-', ''));
+                        saveOutput(itemId);
+                    }
+                }
+            });
+        });
+
+        // 加载更多数据（无限滚动）
+        function loadMoreData() {
+            if (isLoading) return;
+
+            isLoading = true;
+            const grid = document.getElementById('preview-grid');
+            const loadingIndicator = document.createElement('div');
+            loadingIndicator.className = 'loading-placeholder';
+            loadingIndicator.textContent = '加载更多...';
+            loadingIndicator.style.cssText = 'text-align: center; padding: 1rem; color: #6b7280;';
+            grid.appendChild(loadingIndicator);
+
+            fetch(`/api/preview/filter?filter=${currentFilter}&page=${currentPage}&per_page=${perPage}`)
+                .then(response => response.json())
+                .then(data => {
+                    isLoading = false;
+                    loadingIndicator.remove();
+
+                    if (data.items && data.items.length > 0) {
+                        renderMoreItems(data.items);
+                        totalPages = data.total_pages;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading more data:', error);
+                    isLoading = false;
+                    loadingIndicator.remove();
+                });
+        }
+
+        // 渲染更多项目
+        function renderMoreItems(items) {
+            const grid = document.getElementById('preview-grid');
+
+            items.forEach(item => {
+                // 检查是否已存在
+                if (document.querySelector(`.preview-card[data-id="${item.id}"]`)) {
+                    return;
+                }
+
+                const card = document.createElement('div');
+                card.className = `preview-card ${item.quality}`;
+                card.dataset.id = item.id;
+
+                // 与renderPreviewGrid相同的渲染逻辑...
+                // 这里简化处理，实际应该重用renderPreviewGrid的逻辑
+                card.innerHTML = `...`; // 简化的HTML
+                grid.appendChild(card);
+            });
+        }
+    </script>
+</body>
+</html>
