@@ -1,8 +1,9 @@
 // 标注界面的JavaScript
 let currentData = null;
 let isModified = false;
+let hasUnsavedChanges = false; // 新增：专门跟踪是否有未保存的更改
 
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     // 检查URL参数
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.has('jump')) {
@@ -15,9 +16,10 @@ document.addEventListener('DOMContentLoaded', function() {
     // 监听output编辑器的修改
     const outputEditor = document.getElementById('output-editor');
     if (outputEditor) {
-        outputEditor.addEventListener('input', function() {
-            isModified = true;
-            updateModifiedStatus();
+        outputEditor.addEventListener('input', function () {
+            hasUnsavedChanges = true; // 标记为有未保存的更改
+            // isModified = true; // 不再直接修改这个，因为它是服务端状态
+            // updateModifiedStatus();
         });
     }
 
@@ -46,6 +48,7 @@ function loadCurrentSample() {
 
             currentData = data;
             isModified = data.is_modified || false;
+            hasUnsavedChanges = false; // 加载新数据时重置未保存状态
             updateDisplay();
             updateStatistics();
         })
@@ -155,34 +158,35 @@ function annotate(qualityType) {
             quality_type: qualityType
         })
     })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            const qualityNames = {
-                'excellent': '极优',
-                'good': '次优',
-                'poor': '劣质',
-                'discarded': '废弃'
-            };
-            showStatus(`标注为${qualityNames[qualityType]}成功`, 'success');
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const qualityNames = {
+                    'excellent': '极优',
+                    'good': '次优',
+                    'poor': '劣质',
+                    'discarded': '废弃'
+                };
+                showStatus(`标注为${qualityNames[qualityType]}成功`, 'success');
 
-            // 如果是废弃，重置修改状态
-            if (qualityType === 'discarded') {
-                isModified = false;
+                // 如果是废弃，重置修改状态
+                if (qualityType === 'discarded') {
+                    isModified = false;
+                    hasUnsavedChanges = false;
+                }
+
+                // 重新加载数据并自动跳转到下一个
+                setTimeout(() => {
+                    navigate('next');
+                }, 300);
+            } else {
+                showStatus(data.error || '标注失败', 'error');
             }
-
-            // 重新加载数据并自动跳转到下一个
-            setTimeout(() => {
-                navigate('next');
-            }, 300);
-        } else {
-            showStatus(data.error || '标注失败', 'error');
-        }
-    })
-    .catch(error => {
-        console.error('Error annotating:', error);
-        showStatus('标注失败，请检查网络连接', 'error');
-    });
+        })
+        .catch(error => {
+            console.error('Error annotating:', error);
+            showStatus('标注失败，请检查网络连接', 'error');
+        });
 }
 
 // 保存输出修改
@@ -213,21 +217,23 @@ function saveOutput() {
             output: newOutput
         })
     })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            showStatus('输出保存成功', 'success');
-            isModified = false;
-            updateModifiedStatus();
-            loadCurrentSample(); // 重新加载数据
-        } else {
-            showStatus(data.error || '保存失败', 'error');
-        }
-    })
-    .catch(error => {
-        console.error('Error saving output:', error);
-        showStatus('保存失败，请检查网络连接', 'error');
-    });
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showStatus('输出保存成功', 'success');
+                showStatus('输出保存成功', 'success');
+                isModified = true; // 保存后变为已修改（服务端状态）
+                hasUnsavedChanges = false; // 保存后重置未保存状态
+                updateModifiedStatus();
+                loadCurrentSample(); // 重新加载数据
+            } else {
+                showStatus(data.error || '保存失败', 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error saving output:', error);
+            showStatus('保存失败，请检查网络连接', 'error');
+        });
 }
 
 // 导航
@@ -235,7 +241,7 @@ function navigate(direction) {
     if (!currentData) return;
 
     // 检查是否有未保存的修改
-    if (isModified) {
+    if (hasUnsavedChanges) {
         if (!confirm('当前样本有未保存的修改，确定要离开吗？')) {
             return;
         }
@@ -248,27 +254,29 @@ function navigate(direction) {
         },
         body: JSON.stringify({ direction: direction })
     })
-    .then(response => response.json())
-    .then(data => {
-        if (data.error) {
-            if (direction === 'next' && data.error === 'Navigation failed') {
-                showStatus('已经是最后一个样本了', 'info');
-            } else if (direction === 'prev' && data.error === 'Navigation failed') {
-                showStatus('已经是第一个样本了', 'info');
-            } else {
-                showStatus(data.error, 'error');
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                if (direction === 'next' && data.error === 'Navigation failed') {
+                    showStatus('已经是最后一个样本了', 'info');
+                } else if (direction === 'prev' && data.error === 'Navigation failed') {
+                    showStatus('已经是第一个样本了', 'info');
+                } else {
+                    showStatus(data.error, 'error');
+                }
+                return;
             }
-            return;
-        }
 
-        currentData = data;
-        isModified = data.is_modified || false;
-        updateDisplay();
-    })
-    .catch(error => {
-        console.error('Error navigating:', error);
-        showStatus('导航失败，请检查网络连接', 'error');
-    });
+            currentData = data;
+            currentData = data;
+            isModified = data.is_modified || false;
+            hasUnsavedChanges = false; // 导航后重置
+            updateDisplay();
+        })
+        .catch(error => {
+            console.error('Error navigating:', error);
+            showStatus('导航失败，请检查网络连接', 'error');
+        });
 }
 
 // 跳转到指定样本
@@ -282,7 +290,7 @@ function jumpToSample() {
     }
 
     // 检查是否有未保存的修改
-    if (isModified) {
+    if (hasUnsavedChanges) {
         if (!confirm('当前样本有未保存的修改，确定要跳转吗？')) {
             return;
         }
@@ -303,55 +311,72 @@ function resetOutput() {
     fetch('/api/reset_output', {
         method: 'POST'
     })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            const outputEditor = document.getElementById('output-editor');
-            if (outputEditor) {
-                outputEditor.value = data.output;
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const outputEditor = document.getElementById('output-editor');
+                if (outputEditor) {
+                    outputEditor.value = data.output;
+                }
+                isModified = false;
+                hasUnsavedChanges = false; // 重置
+                updateModifiedStatus();
+                showStatus('已重置为原始输出', 'success');
+                loadCurrentSample(); // 重新加载数据
+            } else {
+                showStatus(data.error || '重置失败', 'error');
             }
-            isModified = false;
-            updateModifiedStatus();
-            showStatus('已重置为原始输出', 'success');
-            loadCurrentSample(); // 重新加载数据
-        } else {
-            showStatus(data.error || '重置失败', 'error');
-        }
-    })
-    .catch(error => {
-        console.error('Error resetting:', error);
-        showStatus('重置失败，请检查网络连接', 'error');
-    });
+        })
+        .catch(error => {
+            console.error('Error resetting:', error);
+            showStatus('重置失败，请检查网络连接', 'error');
+        });
 }
 
 // 导出标注结果
 function exportAnnotations() {
-    const exportType = document.getElementById('export-type').value;
+    // 收集质量选项
+    const qualities = [];
+    document.querySelectorAll('input[name="export-quality"]:checked').forEach(cb => {
+        qualities.push(cb.value);
+    });
+
+    if (qualities.length === 0) {
+        showStatus('请至少选择一种质量类型', 'error');
+        return;
+    }
+
+    // 收集状态选项
+    const state = document.querySelector('input[name="export-state"]:checked').value;
 
     fetch('/api/export', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ export_type: exportType })
+        body: JSON.stringify({
+            export_mode: 'advanced',
+            qualities: qualities,
+            state: state
+        })
     })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            showStatus('导出成功！开始下载...', 'success');
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showStatus('导出成功！开始下载...', 'success');
 
-            // 自动下载文件
-            setTimeout(() => {
-                window.location.href = `/api/download/${data.filename}`;
-            }, 1000);
-        } else {
-            showStatus(data.error || '导出失败', 'error');
-        }
-    })
-    .catch(error => {
-        console.error('Error exporting:', error);
-        showStatus('导出失败，请检查网络连接', 'error');
-    });
+                // 自动下载文件
+                setTimeout(() => {
+                    window.location.href = `/api/download/${data.filename}`;
+                }, 1000);
+            } else {
+                showStatus(data.error || '导出失败', 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error exporting:', error);
+            showStatus('导出失败，请检查网络连接', 'error');
+        });
 }
 
 // 更新统计信息
@@ -454,13 +479,13 @@ function escapeHtml(text) {
 }
 
 // 键盘快捷键
-document.addEventListener('keydown', function(e) {
+document.addEventListener('keydown', function (e) {
     // 忽略在输入框中的按键
     if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') {
         return;
     }
 
-    switch(e.key) {
+    switch (e.key) {
         case 'ArrowLeft':
             e.preventDefault();
             navigate('prev');
@@ -503,8 +528,8 @@ document.addEventListener('keydown', function(e) {
 });
 
 // 离开页面提示
-window.addEventListener('beforeunload', function(e) {
-    if (isModified) {
+window.addEventListener('beforeunload', function (e) {
+    if (hasUnsavedChanges) {
         e.preventDefault();
         e.returnValue = '您有未保存的修改，确定要离开吗？';
     }

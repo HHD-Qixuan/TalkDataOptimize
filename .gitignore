@@ -1,0 +1,20 @@
+# User data
+data/uploaded/*
+!data/uploaded/.gitkeep
+data/annotations/*
+!data/annotations/.gitkeep
+data/temp/*
+!data/temp/.gitkeep
+data/config.json
+
+# System files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.log
+.DS_Store
+.idea/
+.vscode/
+venv/
+env/

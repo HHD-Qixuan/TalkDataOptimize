@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -11,6 +12,7 @@
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#4f46e5">
 </head>
+
 <body>
     <div class="container">
         <header>
@@ -131,12 +133,27 @@
 
                 <div class="export-controls">
                     <h3><i class="fas fa-download"></i> 导出选项</h3>
-                    <select id="export-type">
-                        <option value="all">导出所有（除废弃）</option>
-                        <option value="excellent">仅导出极优</option>
-                        <option value="good">仅导出次优</option>
-                        <option value="poor">仅导出劣质</option>
-                    </select>
+                    <h3><i class="fas fa-download"></i> 导出选项</h3>
+                    <div class="export-options">
+                        <div class="option-group">
+                            <label>质量筛选（多选）:</label>
+                            <div class="checkbox-group">
+                                <label><input type="checkbox" name="export-quality" value="excellent" checked>
+                                    极优</label>
+                                <label><input type="checkbox" name="export-quality" value="good" checked> 次优</label>
+                                <label><input type="checkbox" name="export-quality" value="poor"> 劣质</label>
+                                <label><input type="checkbox" name="export-quality" value="unannotated"> 未标注</label>
+                            </div>
+                        </div>
+                        <div class="option-group">
+                            <label>状态筛选:</label>
+                            <div class="radio-group">
+                                <label><input type="radio" name="export-state" value="all" checked> 全部</label>
+                                <label><input type="radio" name="export-state" value="modified"> 仅已修改</label>
+                                <label><input type="radio" name="export-state" value="unmodified"> 仅未修改</label>
+                            </div>
+                        </div>
+                    </div>
                     <button class="btn btn-success" onclick="exportAnnotations()">
                         <i class="fas fa-file-export"></i> 导出标注结果
                     </button>
@@ -186,21 +203,16 @@
                         <h3><i class="fas fa-comment-dots"></i> 输出 <small>(可编辑)</small></h3>
                     </div>
                     <div class="output-container">
-                        <textarea
-                            class="output-editor"
-                            id="output-editor"
-                            placeholder="在此编辑输出内容..."
-                            spellcheck="false"
-                            autocapitalize="none"
-                            autocomplete="off"
-                            autocorrect="off"></textarea>
+                        <textarea class="output-editor" id="output-editor" placeholder="在此编辑输出内容..." spellcheck="false"
+                            autocapitalize="none" autocomplete="off" autocorrect="off"></textarea>
                         <div class="editor-info">
                             <small><i class="fas fa-lightbulb"></i> 提示：劣质样本往往是因为上下文崩溃导致的，修改输出可以提高数据质量</small>
                         </div>
                     </div>
                 </div>
 
-                <div class="mobile-tips" style="margin-top: 1rem; padding: 0.75rem; background: #f0f9ff; border-radius: 8px; border-left: 4px solid #0ea5e9; display: none;">
+                <div class="mobile-tips"
+                    style="margin-top: 1rem; padding: 0.75rem; background: #f0f9ff; border-radius: 8px; border-left: 4px solid #0ea5e9; display: none;">
                     <p style="margin: 0; font-size: 0.8rem; color: #0369a1;">
                         <i class="fas fa-mobile-alt"></i>
                         <strong>移动端提示：</strong>
@@ -219,7 +231,7 @@
         }
 
         // 页面加载时初始化
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', function () {
             const urlParams = new URLSearchParams(window.location.search);
             if (urlParams.has('jump')) {
                 navigate(urlParams.get('jump'));
@@ -229,4 +241,5 @@
         });
     </script>
 </body>
+
 </html>

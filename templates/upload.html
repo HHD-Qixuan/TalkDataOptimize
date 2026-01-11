@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,6 +8,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
+
 <body>
     <div class="container">
         <header>
@@ -35,7 +37,7 @@
                     <li>支持Alpaca格式的JSON文件</li>
                     <li>文件应为包含多个对话样本的数组</li>
                     <li>每个样本应包含history、input、output字段</li>
-                    <li>支持多轮对话数据（10-100轮）</li>
+                    <li>支持多轮对话数据</li>
                     <li>推荐使用UTF-8编码</li>
                 </ul>
             </div>
@@ -46,7 +48,7 @@
                 </div>
                 <div class="upload-text">
                     <h3>拖放文件到此处或点击选择</h3>
-                    <p>支持JSON格式，最大100MB</p>
+                    <p>支持JSON格式，无大小限制</p>
                 </div>
                 <input type="file" id="file-input" accept=".json" hidden>
             </div>
@@ -70,6 +72,26 @@
 
             <div class="upload-hint">
                 <p><strong>提示：</strong>上传后系统会自动加载数据，您可以立即开始标注</p>
+            </div>
+        </div>
+
+        <div class="existing-datasets" id="dataset-list-container" style="display: none; margin-top: 2rem;">
+            <h3 style="text-align: center;"><i class="fas fa-database"></i> 已上传的数据集</h3>
+            <div class="table-responsive">
+                <table class="dataset-table">
+                    <thead>
+                        <tr>
+                            <th>文件名</th>
+                            <th>大小</th>
+                            <th>修改时间</th>
+                            <th>状态</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="dataset-list">
+                        <!-- 数据集列表会动态加载到这里 -->
+                    </tbody>
+                </table>
             </div>
         </div>
 
@@ -134,9 +156,8 @@
                 return;
             }
 
-            if (file.size > 100 * 1024 * 1024) {
-                showStatus('文件大小超过100MB限制', 'error');
-                return;
+            if (file.size > 1024 * 1024 * 1024 * 10) { // Limit to 10GB just in case, or remove completely
+                showStatus('文件过大，请谨慎上传', 'info');
             }
 
             selectedFile = file;
@@ -159,7 +180,7 @@
             // 预览文件内容（如果是小文件）
             if (file.size < 1 * 1024 * 1024) {
                 const reader = new FileReader();
-                reader.onload = function(e) {
+                reader.onload = function (e) {
                     try {
                         const data = JSON.parse(e.target.result);
                         details.innerHTML += `
@@ -197,35 +218,40 @@
                 method: 'POST',
                 body: formData
             })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    showStatus(`上传成功！加载了 ${data.count} 个样本`, 'success');
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        showStatus(`上传成功！加载了 ${data.count} 个样本`, 'success');
 
-                    // 3秒后跳转到标注界面
-                    setTimeout(() => {
-                        window.location.href = '/';
-                    }, 1000);
-                } else {
-                    showStatus(data.error || '上传失败', 'error');
+                        // 3秒后跳转到标注界面
+                        setTimeout(() => {
+                            window.location.href = '/';
+                        }, 1000);
+                    } else {
+                        showStatus(data.error || '上传失败', 'error');
+                        uploadBtn.innerHTML = '<i class="fas fa-upload"></i> 上传数据集';
+                        uploadBtn.disabled = false;
+                    }
+                })
+                .catch(error => {
+                    console.error('Upload error:', error);
+                    showStatus('上传失败，请检查网络连接', 'error');
                     uploadBtn.innerHTML = '<i class="fas fa-upload"></i> 上传数据集';
                     uploadBtn.disabled = false;
-                }
-            })
-            .catch(error => {
-                console.error('Upload error:', error);
-                showStatus('上传失败，请检查网络连接', 'error');
-                uploadBtn.innerHTML = '<i class="fas fa-upload"></i> 上传数据集';
-                uploadBtn.disabled = false;
-            });
+                });
         }
 
-        function formatFileSize(bytes) {
+        function formatSize(bytes) {
             if (bytes === 0) return '0 Bytes';
             const k = 1024;
             const sizes = ['Bytes', 'KB', 'MB', 'GB'];
             const i = Math.floor(Math.log(bytes) / Math.log(k));
             return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        function formatDate(isoString) {
+            if (!isoString) return '';
+            return new Date(isoString).toLocaleString();
         }
 
         function showStatus(message, type = 'info') {
@@ -242,12 +268,107 @@
         }
 
         // 页面加载时检查URL参数
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', function () {
             const urlParams = new URLSearchParams(window.location.search);
             if (urlParams.has('error')) {
                 showStatus(urlParams.get('error'), 'error');
             }
+
+            // 加载数据集列表
+            loadDatasets();
         });
+
+        function loadDatasets() {
+            fetch('/api/datasets')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.files && data.files.length > 0) {
+                        const container = document.getElementById('dataset-list-container');
+                        const tbody = document.getElementById('dataset-list');
+
+                        container.style.display = 'block';
+                        tbody.innerHTML = '';
+
+                        data.files.forEach(file => {
+                            const row = document.createElement('tr');
+
+                            // 状态徽章
+                            let statusBadge = '';
+                            let actionButtons = '';
+
+                            if (file.is_current) {
+                                statusBadge = '<span class="status-badge current">当前使用</span>';
+                                actionButtons = '<button class="btn btn-sm btn-secondary" disabled>加载</button>';
+                            } else {
+                                actionButtons = `
+                            <button class="btn btn-sm btn-primary" onclick="loadDataset('${file.name}')">加载</button>
+                            <button class="btn btn-sm btn-danger" onclick="deleteDataset('${file.name}')">删除</button>
+                        `;
+                            }
+
+                            row.innerHTML = `
+                        <td>${file.display_name}</td>
+                        <td>${formatSize(file.size)}</td>
+                        <td>${formatDate(file.modified)}</td>
+                        <td>${statusBadge}</td>
+                        <td>${actionButtons}</td>
+                    `;
+
+                            tbody.appendChild(row);
+                        });
+                    } else {
+                        document.getElementById('dataset-list-container').style.display = 'none';
+                    }
+                })
+                .catch(error => console.error('Error loading datasets:', error));
+        }
+
+        function loadDataset(filename) {
+            if (!confirm(`确定要加载数据集 ${filename} 吗？`)) return;
+
+            fetch('/api/switch_dataset', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ filename: filename })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        showStatus(`成功加载数据集，包含 ${data.count} 个样本`, 'success');
+                        setTimeout(() => {
+                            window.location.href = '/';
+                        }, 1000);
+                    } else {
+                        showStatus(data.error || '加载失败', 'error');
+                    }
+                })
+                .catch(error => showStatus('加载失败，请检查网络连接', 'error'));
+        }
+
+        function deleteDataset(filename) {
+            if (!confirm(`确定要永久删除数据集 ${filename} 吗？此操作不可恢复！`)) return;
+
+            fetch('/api/delete_dataset', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ filename: filename })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        showStatus('数据集已删除', 'success');
+                        loadDatasets(); // 刷新列表
+                    } else {
+                        showStatus(data.error || '删除失败', 'error');
+                    }
+                })
+                .catch(error => showStatus('删除失败，请检查网络连接', 'error'));
+        }
     </script>
 </body>
+
 </html>

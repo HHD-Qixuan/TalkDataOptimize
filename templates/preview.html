@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -39,12 +40,29 @@
             color: white;
         }
 
-        .quick-action-btn.excellent.active { background: #10b981; }
-        .quick-action-btn.good.active { background: #3b82f6; }
-        .quick-action-btn.poor.active { background: #f59e0b; }
-        .quick-action-btn.discarded.active { background: #6b7280; }
-        .quick-action-btn.modified.active { background: #8b5cf6; }
-        .quick-action-btn.annotated.active { background: #0ea5e9; }
+        .quick-action-btn.excellent.active {
+            background: #10b981;
+        }
+
+        .quick-action-btn.good.active {
+            background: #3b82f6;
+        }
+
+        .quick-action-btn.poor.active {
+            background: #f59e0b;
+        }
+
+        .quick-action-btn.discarded.active {
+            background: #6b7280;
+        }
+
+        .quick-action-btn.modified.active {
+            background: #8b5cf6;
+        }
+
+        .quick-action-btn.annotated.active {
+            background: #0ea5e9;
+        }
 
         .pagination {
             display: flex;
@@ -205,6 +223,7 @@
         }
     </style>
 </head>
+
 <body>
     <div class="container">
         <header>
@@ -257,11 +276,9 @@
 
             <!-- 搜索框 -->
             <div class="search-box" style="margin-bottom: 1rem;">
-                <input type="text"
-                       id="search-input"
-                       placeholder="搜索对话内容或输出..."
-                       style="width: 100%; padding: 0.75rem; border: 2px solid #d1d5db; border-radius: 8px; font-size: 0.9rem;"
-                       onkeyup="searchSamples()">
+                <input type="text" id="search-input" placeholder="搜索对话内容或输出..."
+                    style="width: 100%; padding: 0.75rem; border: 2px solid #d1d5db; border-radius: 8px; font-size: 0.9rem;"
+                    onkeyup="searchSamples()">
             </div>
 
             <!-- 批量操作 -->
@@ -326,6 +343,7 @@
     <script>
         // 全局变量
         let currentFilter = 'all';
+        let currentSearch = ''; // 新增：当前搜索词
         let currentPage = 1;
         let totalPages = 1;
         let perPage = 50; // 每页显示数量
@@ -364,7 +382,12 @@
             const grid = document.getElementById('preview-grid');
             grid.innerHTML = '<div class="loading-placeholder" style="text-align: center; padding: 2rem; color: #6b7280;">加载中...</div>';
 
-            fetch(`/api/preview/filter?filter=${currentFilter}&page=${currentPage}&per_page=${perPage}`)
+            let url = `/api/preview/filter?filter=${currentFilter}&page=${currentPage}&per_page=${perPage}`;
+            if (currentSearch) {
+                url += `&search=${encodeURIComponent(currentSearch)}`;
+            }
+
+            fetch(url)
                 .then(response => response.json())
                 .then(data => {
                     isLoading = false;
@@ -413,6 +436,12 @@
                     lastUpdate = `修改: ${formatTime(item.modify_timestamp)}`;
                 } else if (item.annotate_timestamp) {
                     lastUpdate = `标注: ${formatTime(item.annotate_timestamp)}`;
+                }
+
+                // 准备输出内容（如果搜索词存在，应用高亮）
+                let outputDisplay = escapeHtml(item.output);
+                if (currentSearch) {
+                    outputDisplay = highlightText(outputDisplay, currentSearch);
                 }
 
                 card.innerHTML = `
@@ -511,28 +540,28 @@
                     quality_type: qualityType
                 })
             })
-            .then(response => response.json())
-            .then(data => {
-                card.classList.remove('updating');
+                .then(response => response.json())
+                .then(data => {
+                    card.classList.remove('updating');
 
-                if (data.success) {
-                    // 更新卡片状态
-                    updateCardState(itemId, data.item);
+                    if (data.success) {
+                        // 更新卡片状态
+                        updateCardState(itemId, data.item);
 
-                    // 显示成功消息
-                    showQuickStatus(`样本 ${itemId} 已标记为${getQualityText(qualityType)}`, 'success');
+                        // 显示成功消息
+                        showQuickStatus(`样本 ${itemId} 已标记为${getQualityText(qualityType)}`, 'success');
 
-                    // 更新统计
-                    updateStatistics();
-                } else {
-                    showStatus(data.error || '标注失败', 'error');
-                }
-            })
-            .catch(error => {
-                console.error('Error annotating:', error);
-                card.classList.remove('updating');
-                showStatus('标注失败，请检查网络连接', 'error');
-            });
+                        // 更新统计
+                        updateStatistics();
+                    } else {
+                        showStatus(data.error || '标注失败', 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error annotating:', error);
+                    card.classList.remove('updating');
+                    showStatus('标注失败，请检查网络连接', 'error');
+                });
         }
 
         // 保存输出（无确认，无刷新整个列表）
@@ -565,28 +594,28 @@
                     output: newOutput
                 })
             })
-            .then(response => response.json())
-            .then(data => {
-                card.classList.remove('updating');
+                .then(response => response.json())
+                .then(data => {
+                    card.classList.remove('updating');
 
-                if (data.success) {
-                    // 更新卡片状态
-                    updateCardState(itemId, data.item);
+                    if (data.success) {
+                        // 更新卡片状态
+                        updateCardState(itemId, data.item);
 
-                    // 显示成功消息
-                    showQuickStatus(`样本 ${itemId} 输出已保存`, 'success');
+                        // 显示成功消息
+                        showQuickStatus(`样本 ${itemId} 输出已保存`, 'success');
 
-                    // 更新统计
-                    updateStatistics();
-                } else {
-                    showStatus(data.error || '保存失败', 'error');
-                }
-            })
-            .catch(error => {
-                console.error('Error saving output:', error);
-                card.classList.remove('updating');
-                showStatus('保存失败，请检查网络连接', 'error');
-            });
+                        // 更新统计
+                        updateStatistics();
+                    } else {
+                        showStatus(data.error || '保存失败', 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error saving output:', error);
+                    card.classList.remove('updating');
+                    showStatus('保存失败，请检查网络连接', 'error');
+                });
         }
 
         // 重置输出（有确认）
@@ -610,35 +639,35 @@
                     item_id: itemId
                 })
             })
-            .then(response => response.json())
-            .then(data => {
-                card.classList.remove('updating');
+                .then(response => response.json())
+                .then(data => {
+                    card.classList.remove('updating');
 
-                if (data.success) {
-                    // 更新卡片状态和输出内容
-                    updateCardState(itemId, data.item);
+                    if (data.success) {
+                        // 更新卡片状态和输出内容
+                        updateCardState(itemId, data.item);
 
-                    // 更新文本域内容
-                    const outputEditor = document.getElementById(`output-editor-${itemId}`);
-                    if (outputEditor) {
-                        outputEditor.value = data.item.output;
-                        autoResizeTextarea(outputEditor);
+                        // 更新文本域内容
+                        const outputEditor = document.getElementById(`output-editor-${itemId}`);
+                        if (outputEditor) {
+                            outputEditor.value = data.item.output;
+                            autoResizeTextarea(outputEditor);
+                        }
+
+                        // 显示成功消息
+                        showQuickStatus(`样本 ${itemId} 输出已重置`, 'success');
+
+                        // 更新统计
+                        updateStatistics();
+                    } else {
+                        showStatus(data.error || '重置失败', 'error');
                     }
-
-                    // 显示成功消息
-                    showQuickStatus(`样本 ${itemId} 输出已重置`, 'success');
-
-                    // 更新统计
-                    updateStatistics();
-                } else {
-                    showStatus(data.error || '重置失败', 'error');
-                }
-            })
-            .catch(error => {
-                console.error('Error resetting output:', error);
-                card.classList.remove('updating');
-                showStatus('重置失败，请检查网络连接', 'error');
-            });
+                })
+                .catch(error => {
+                    console.error('Error resetting output:', error);
+                    card.classList.remove('updating');
+                    showStatus('重置失败，请检查网络连接', 'error');
+                });
         }
 
         // 更新卡片状态
@@ -805,45 +834,19 @@
                 .catch(error => console.error('Error updating statistics:', error));
         }
 
-        // 搜索样本
+        // 搜索样本（服务端搜索）
         function searchSamples() {
             clearTimeout(searchTimer);
             searchTimer = setTimeout(() => {
-                const searchTerm = document.getElementById('search-input').value.toLowerCase().trim();
+                const searchTerm = document.getElementById('search-input').value.trim();
 
-                if (!searchTerm) {
+                // 如果搜索词变更，重置到第一页并重新加载
+                if (searchTerm !== currentSearch) {
+                    currentSearch = searchTerm;
+                    currentPage = 1;
                     loadPreviewData();
-                    return;
                 }
-
-                const cards = document.querySelectorAll('.preview-card');
-                let matchCount = 0;
-
-                cards.forEach(card => {
-                    const historyElement = card.querySelector('.history-preview');
-                    const outputElement = card.querySelector('.output-editor-preview');
-
-                    const historyText = historyElement ? historyElement.textContent.toLowerCase() : '';
-                    const outputText = outputElement ? outputElement.value.toLowerCase() : '';
-
-                    if (historyText.includes(searchTerm) || outputText.includes(searchTerm)) {
-                        card.style.display = 'block';
-                        matchCount++;
-
-                        // 高亮搜索词
-                        if (historyElement && historyText.includes(searchTerm)) {
-                            historyElement.innerHTML = highlightText(historyElement.textContent, searchTerm);
-                        }
-                        if (outputElement && outputText.includes(searchTerm)) {
-                            outputElement.innerHTML = highlightText(outputElement.value, searchTerm);
-                        }
-                    } else {
-                        card.style.display = 'none';
-                    }
-                });
-
-                document.getElementById('showing-count').textContent = matchCount;
-            }, 300);
+            }, 500); // 稍微增加防抖时间
         }
 
         // 高亮文本
@@ -937,7 +940,7 @@
                     });
 
                     showQuickStatus(`批量标注完成：成功 ${successCount} 个，失败 ${errorCount} 个`,
-                                  errorCount === 0 ? 'success' : 'warning');
+                        errorCount === 0 ? 'success' : 'warning');
 
                     // 清除选择
                     clearBatchSelection();
@@ -989,7 +992,7 @@
                 const user = Array.isArray(turn) ? turn[0] : turn.user || '';
                 const assistant = Array.isArray(turn) ? turn[1] : turn.assistant || '';
 
-                preview += `[${i+1}] 用户: ${user.substring(0, 30)}${user.length > 30 ? '...' : ''}\n`;
+                preview += `[${i + 1}] 用户: ${user.substring(0, 30)}${user.length > 30 ? '...' : ''}\n`;
                 preview += `     助手: ${assistant.substring(0, 30)}${assistant.length > 30 ? '...' : ''}\n\n`;
             }
 
@@ -1052,11 +1055,11 @@
         }
 
         // 页面加载时初始化
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', function () {
             loadPreviewData();
 
             // 监听滚动事件
-            window.addEventListener('scroll', function() {
+            window.addEventListener('scroll', function () {
                 const scrollBtn = document.getElementById('scroll-to-top');
                 if (window.scrollY > 300) {
                     scrollBtn.style.display = 'flex';
@@ -1077,7 +1080,7 @@
             });
 
             // 监听键盘快捷键
-            document.addEventListener('keydown', function(e) {
+            document.addEventListener('keydown', function (e) {
                 // 阻止在输入框中触发
                 if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') {
                     return;
@@ -1121,7 +1124,12 @@
             loadingIndicator.style.cssText = 'text-align: center; padding: 1rem; color: #6b7280;';
             grid.appendChild(loadingIndicator);
 
-            fetch(`/api/preview/filter?filter=${currentFilter}&page=${currentPage}&per_page=${perPage}`)
+            let url = `/api/preview/filter?filter=${currentFilter}&page=${currentPage}&per_page=${perPage}`;
+            if (currentSearch) {
+                url += `&search=${encodeURIComponent(currentSearch)}`;
+            }
+
+            fetch(url)
                 .then(response => response.json())
                 .then(data => {
                     isLoading = false;
@@ -1161,4 +1169,5 @@
         }
     </script>
 </body>
+
 </html>

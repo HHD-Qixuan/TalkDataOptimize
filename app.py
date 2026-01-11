@@ -9,7 +9,7 @@ import uuid
 app = Flask(__name__)
 CORS(app)
 app.config['SECRET_KEY'] = 'your-secret-key-here'
-app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024
+# app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # Unlimited
 app.config['UPLOAD_FOLDER'] = 'data/uploaded'
 app.config['ANNOTATION_FOLDER'] = 'data/annotations'
 app.config['TEMP_FOLDER'] = 'data/temp'
@@ -25,6 +25,32 @@ class AnnotationManager:
         self.dataset = []
         self.dataset_name = None
         self.is_modified = False  # 标注界面中当前样本是否被修改
+        self.config_file = 'data/config.json'
+        self.load_config()
+
+    def load_config(self):
+        """加载配置"""
+        if os.path.exists(self.config_file):
+            try:
+                with open(self.config_file, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                    last_dataset = config.get('last_dataset')
+                    if last_dataset and os.path.exists(os.path.join(app.config['UPLOAD_FOLDER'], last_dataset)):
+                        print(f"Auto-loading last dataset: {last_dataset}")
+                        self.load_dataset(last_dataset)
+            except Exception as e:
+                print(f"Error loading config: {e}")
+
+    def save_config(self):
+        """保存配置"""
+        config = {
+            'last_dataset': self.dataset_name
+        }
+        try:
+            with open(self.config_file, 'w', encoding='utf-8') as f:
+                json.dump(config, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"Error saving config: {e}")
 
     def load_dataset(self, filename):
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
@@ -73,6 +99,7 @@ class AnnotationManager:
                             item['is_modified'] = item_data.get('is_modified', False)
                             item['modify_timestamp'] = item_data.get('modify_timestamp')
 
+        self.save_config()  # 保存配置
         return len(self.dataset)
 
     # ============ 标注界面API ============
@@ -162,28 +189,69 @@ class AnnotationManager:
 
         return self.get_current_item()
 
-    def export_annotations(self, export_type='all'):
+    def export_annotations(self, export_type='all', qualities=None, state='all'):
         """导出标注结果"""
         if not self.dataset_name:
             return None
 
+        # 兼容旧API
+        if qualities is None:
+            qualities = []
+            if export_type == 'all':
+                qualities = ['excellent', 'good', 'poor', 'unannotated'] # explicit all except discarded
+            elif export_type == 'annotated':
+                qualities = ['excellent', 'good', 'poor', 'discarded'] # Logic handled by is_annotated check usually, but let's stick to simple list
+            elif export_type == 'unannotated':
+                qualities = ['unannotated']
+            elif export_type in ['excellent', 'good', 'poor', 'discarded']:
+                qualities = [export_type]
+        
+        # 将 quality 列表转为集合，便于查找
+        quality_set = set(qualities)
+
         export_data = []
         for item in self.dataset:
-            if export_type == 'all' or item['quality'] == export_type:
-                if item['quality'] != 'discarded':  # 废弃的不导出
-                    export_item = {
-                        'history': item['history'],
-                        'instruction': item['instruction'],
-                        'input': item['input'],
-                        'output': item['output'],
-                        'quality': item['quality'],
-                        'is_modified': item['is_modified'],
-                        'original_output': item['original_output']
-                    }
-                    export_data.append(export_item)
+            # 1. Check Quality
+            if item['quality'] == 'discarded':
+                continue # Never export discarded for now unless explicitly requested? User said "except discarded".
+            
+            # Special case for 'annotated' legacy export_type which relied on is_annotated flag
+            # But in new logic, we rely on quality list.
+            # If item is 'unannotated', its quality is 'unannotated'.
+            
+            quality_match = item['quality'] in quality_set
+            
+            # 2. Check State
+            state_match = True
+            if state == 'modified':
+                state_match = item['is_modified']
+            elif state == 'unmodified':
+                state_match = not item['is_modified']
+            
+            # 3. Legacy compatibility adjustments if using old export_type
+            if export_type == 'annotated':
+                 quality_match = item['is_annotated']
+            elif export_type == 'modified':
+                 quality_match = True # Ignore quality
+                 state_match = item['is_modified']
+            elif export_type == 'unmodified':
+                 quality_match = True # Ignore quality
+                 state_match = not item['is_modified']
+
+            if quality_match and state_match:
+                export_item = {
+                    'history': item['history'],
+                    'instruction': item['instruction'],
+                    'input': item['input'],
+                    'output': item['output'],
+                    'quality': item['quality'],
+                    'is_modified': item['is_modified'],
+                    'original_output': item['original_output']
+                }
+                export_data.append(export_item)
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        export_filename = f"{self.dataset_name.split('.')[0]}_annotated_{timestamp}.json"
+        export_filename = f"{self.dataset_name.split('.')[0]}_export_{timestamp}.json"
         export_path = os.path.join(app.config['ANNOTATION_FOLDER'], export_filename)
 
         with open(export_path, 'w', encoding='utf-8') as f:
@@ -271,24 +339,37 @@ class AnnotationManager:
             'annotate_timestamp': item['annotate_timestamp']
         }
 
-    def get_filtered_items(self, filter_type='all', start=0, limit=100):
+    def get_filtered_items(self, filter_type='all', start=0, limit=100, search_query=None):
         """获取过滤后的项目（分页）"""
         filtered_items = []
 
+        # 预处理搜索词
+        if search_query:
+            search_query = search_query.lower().strip()
+
         for item in self.dataset:
-            if self._match_filter(item, filter_type):
-                filtered_items.append({
-                    'id': item['id'],
-                    'history': item['history'],
-                    'instruction': item['instruction'],
-                    'input': item['input'],
-                    'output': item['output'],
-                    'quality': item['quality'],
-                    'is_modified': item['is_modified'],
-                    'is_annotated': item['is_annotated'],
-                    'modify_timestamp': item['modify_timestamp'],
-                    'annotate_timestamp': item['annotate_timestamp']
-                })
+            # 1. 第一步：应用类型过滤器
+            if not self._match_filter(item, filter_type):
+                continue
+
+            # 2. 第二步：应用搜索过滤器（如果存在）
+            if search_query:
+                # 只在 output 中搜索
+                if not (item['output'] and search_query in item['output'].lower()):
+                    continue
+
+            filtered_items.append({
+                'id': item['id'],
+                'history': item['history'],
+                'instruction': item['instruction'],
+                'input': item['input'],
+                'output': item['output'],
+                'quality': item['quality'],
+                'is_modified': item['is_modified'],
+                'is_annotated': item['is_annotated'],
+                'modify_timestamp': item['modify_timestamp'],
+                'annotate_timestamp': item['annotate_timestamp']
+            })
 
         # 应用分页
         end = start + limit
@@ -412,6 +493,92 @@ def upload_dataset():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/datasets', methods=['GET'])
+def list_datasets():
+    """获取数据集列表"""
+    try:
+        files = []
+        upload_folder = app.config['UPLOAD_FOLDER']
+        if os.path.exists(upload_folder):
+            for f in os.listdir(upload_folder):
+                if f.endswith('.json'):
+                    filepath = os.path.join(upload_folder, f)
+                    stats = os.stat(filepath)
+                    
+                    # 生成显示名称（去除前面的UUID）
+                    display_name = f
+                    if '_' in f:
+                        parts = f.split('_', 1)
+                        if len(parts[0]) == 32:  # 简单的UUID长度检查
+                           display_name = parts[1]
+
+                    files.append({
+                        'name': f,
+                        'display_name': display_name,
+                        'size': stats.st_size,
+                        'modified': datetime.fromtimestamp(stats.st_mtime).isoformat(),
+                        'is_current': f == annotation_manager.dataset_name
+                    })
+        
+        # 按修改时间倒序排序
+        files.sort(key=lambda x: x['modified'], reverse=True)
+        return jsonify({'files': files})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/switch_dataset', methods=['POST'])
+def switch_dataset():
+    """切换数据集"""
+    data = request.json
+    filename = data.get('filename')
+    
+    if not filename:
+        return jsonify({'error': 'Filename is required'}), 400
+        
+    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    if not os.path.exists(filepath):
+        return jsonify({'error': 'File not found'}), 404
+        
+    try:
+        count = annotation_manager.load_dataset(filename)
+        return jsonify({
+            'success': True,
+            'filename': filename,
+            'count': count
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/delete_dataset', methods=['POST'])
+def delete_dataset():
+    """删除数据集"""
+    data = request.json
+    filename = data.get('filename')
+    
+    if not filename:
+        return jsonify({'error': 'Filename is required'}), 400
+        
+    if filename == annotation_manager.dataset_name:
+        return jsonify({'error': 'Cannot delete current dataset'}), 400
+        
+    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    if not os.path.exists(filepath):
+        return jsonify({'error': 'File not found'}), 404
+        
+    try:
+        os.remove(filepath)
+        # 同时也删除相关的临时文件
+        temp_file = os.path.join(app.config['TEMP_FOLDER'], f"{filename}_temp.json")
+        if os.path.exists(temp_file):
+            os.remove(temp_file)
+            
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 # ============ 标注界面API ============
 @app.route('/api/current')
 def get_current():
@@ -483,9 +650,17 @@ def navigate():
 def export_annotations():
     """导出标注结果"""
     data = request.json
-    export_type = data.get('export_type', 'all')
+    
+    # Check for new advanced mode
+    if data.get('export_mode') == 'advanced':
+        qualities = data.get('qualities', [])
+        state = data.get('state', 'all')
+        export_path = annotation_manager.export_annotations(export_type='advanced', qualities=qualities, state=state)
+    else:
+        # Legacy
+        export_type = data.get('export_type', 'all')
+        export_path = annotation_manager.export_annotations(export_type=export_type)
 
-    export_path = annotation_manager.export_annotations(export_type)
     if export_path:
         return jsonify({
             'success': True,
@@ -500,11 +675,12 @@ def export_annotations():
 def get_filtered_preview():
     """获取过滤后的预览数据（分页）"""
     filter_type = request.args.get('filter', 'all')
+    search_query = request.args.get('search', '')
     page = int(request.args.get('page', 1))
     per_page = int(request.args.get('per_page', 50))
 
     start = (page - 1) * per_page
-    items, total_count = annotation_manager.get_filtered_items(filter_type, start, per_page)
+    items, total_count = annotation_manager.get_filtered_items(filter_type, start, per_page, search_query)
 
     return jsonify({
         'items': items,
