@@ -31,6 +31,10 @@ document.addEventListener('DOMContentLoaded', function () {
 function loadCurrentSample() {
     fetch('/api/current')
         .then(response => {
+            // 允许404通过，因为它表示"无数据集加载"，而不是网络错误
+            if (response.status === 404) {
+                return response.json();
+            }
             if (!response.ok) {
                 throw new Error('Network response was not ok');
             }

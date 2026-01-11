@@ -170,7 +170,7 @@
             const details = document.getElementById('file-details');
             details.innerHTML = `
                 <p><strong>文件名:</strong> ${file.name}</p>
-                <p><strong>文件大小:</strong> ${formatFileSize(file.size)}</p>
+                <p><strong>文件大小:</strong> ${formatSize(file.size)}</p>
                 <p><strong>修改时间:</strong> ${new Date(file.lastModified).toLocaleString()}</p>
             `;
 
@@ -298,12 +298,15 @@
 
                             if (file.is_current) {
                                 statusBadge = '<span class="status-badge current">当前使用</span>';
-                                actionButtons = '<button class="btn btn-sm btn-secondary" disabled>加载</button>';
+                                actionButtons = `
+                                    <button class="btn btn-sm btn-secondary" disabled>加载</button>
+                                    <button class="btn btn-sm btn-danger" onclick="deleteDataset('${file.name}')">删除</button>
+                                `;
                             } else {
                                 actionButtons = `
-                            <button class="btn btn-sm btn-primary" onclick="loadDataset('${file.name}')">加载</button>
-                            <button class="btn btn-sm btn-danger" onclick="deleteDataset('${file.name}')">删除</button>
-                        `;
+                                    <button class="btn btn-sm btn-primary" onclick="loadDataset('${file.name}')">加载</button>
+                                    <button class="btn btn-sm btn-danger" onclick="deleteDataset('${file.name}')">删除</button>
+                                `;
                             }
 
                             row.innerHTML = `

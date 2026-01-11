@@ -1,12 +1,14 @@
 import os
 import json
-import shutil
 from datetime import datetime
 from flask import Flask, render_template, request, jsonify, send_file, send_from_directory
 from flask_cors import CORS
+from werkzeug.utils import secure_filename
 import uuid
 
 app = Flask(__name__)
+
+
 CORS(app)
 app.config['SECRET_KEY'] = 'your-secret-key-here'
 # app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # Unlimited
@@ -477,7 +479,7 @@ def upload_dataset():
     if not file.filename.endswith('.json'):
         return jsonify({'error': 'Only JSON files are allowed'}), 400
 
-    filename = f"{uuid.uuid4().hex}_{file.filename}"
+    filename = f"{uuid.uuid4().hex}_{os.path.basename(file.filename)}"
     filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
     file.save(filepath)
 
@@ -536,6 +538,9 @@ def switch_dataset():
     if not filename:
         return jsonify({'error': 'Filename is required'}), 400
         
+    if os.path.basename(filename) != filename:
+        return jsonify({'error': 'Invalid filename'}), 400
+
     filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
     if not os.path.exists(filepath):
         return jsonify({'error': 'File not found'}), 404
@@ -559,15 +564,23 @@ def delete_dataset():
     
     if not filename:
         return jsonify({'error': 'Filename is required'}), 400
-        
-    if filename == annotation_manager.dataset_name:
-        return jsonify({'error': 'Cannot delete current dataset'}), 400
+
+    if os.path.basename(filename) != filename:
+        return jsonify({'error': 'Invalid filename'}), 400
         
     filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
     if not os.path.exists(filepath):
         return jsonify({'error': 'File not found'}), 404
         
     try:
+        # 如果删除的是当前数据集，先清除内存中的状态
+        if filename == annotation_manager.dataset_name:
+            annotation_manager.dataset = []
+            annotation_manager.dataset_name = None
+            annotation_manager.current_index = 0
+            annotation_manager.is_modified = False
+            annotation_manager.save_config() # 更新配置文件，清除last_dataset
+
         os.remove(filepath)
         # 同时也删除相关的临时文件
         temp_file = os.path.join(app.config['TEMP_FOLDER'], f"{filename}_temp.json")

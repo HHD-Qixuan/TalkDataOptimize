@@ -423,94 +423,7 @@
             grid.innerHTML = '';
 
             items.forEach(item => {
-                const card = document.createElement('div');
-                card.className = `preview-card ${item.quality}`;
-                card.dataset.id = item.id;
-
-                // 获取对话历史预览
-                const historyPreview = formatHistoryPreview(item.history);
-
-                // 格式化时间
-                let lastUpdate = '未更新';
-                if (item.modify_timestamp) {
-                    lastUpdate = `修改: ${formatTime(item.modify_timestamp)}`;
-                } else if (item.annotate_timestamp) {
-                    lastUpdate = `标注: ${formatTime(item.annotate_timestamp)}`;
-                }
-
-                // 准备输出内容（如果搜索词存在，应用高亮）
-                let outputDisplay = escapeHtml(item.output);
-                if (currentSearch) {
-                    outputDisplay = highlightText(outputDisplay, currentSearch);
-                }
-
-                card.innerHTML = `
-                    <div class="card-update-indicator">
-                        <i class="fas fa-spinner fa-spin"></i> 更新中
-                    </div>
-
-                    <div class="card-header">
-                        <div style="display: flex; align-items: center; gap: 0.5rem;">
-                            <input type="checkbox" class="batch-checkbox card-select"
-                                   onchange="toggleItemSelection(${item.id})"
-                                   ${selectedItems.has(item.id) ? 'checked' : ''}>
-                            <span class="sample-id">ID: ${item.id}</span>
-                        </div>
-                        <div>
-                            <span class="annotation-badge">${getQualityText(item.quality)}</span>
-                        </div>
-                    </div>
-
-                    <div class="status-indicators">
-                        ${item.is_modified ? '<span class="status-indicator modified"><i class="fas fa-edit"></i> 已修改</span>' : ''}
-                        ${item.is_annotated ? '<span class="status-indicator annotated"><i class="fas fa-tag"></i> 已标注</span>' : ''}
-                    </div>
-
-                    <div class="preview-section">
-                        <h4><i class="fas fa-history"></i> 对话历史预览</h4>
-                        <div class="history-preview" onclick="showHistory(${item.id})" style="cursor: pointer;">
-                            ${escapeHtml(historyPreview)}
-                        </div>
-                    </div>
-
-                    <div class="preview-section">
-                        <h4><i class="fas fa-comment-dots"></i> 输出内容</h4>
-                        <div class="output-edit-container">
-                            <textarea
-                                class="output-editor-preview"
-                                id="output-editor-${item.id}"
-                                placeholder="在此编辑输出内容..."
-                                spellcheck="false"
-                                oninput="autoResizeTextarea(this)"
-                                data-original="${escapeHtml(item.output)}">${escapeHtml(item.output)}</textarea>
-                        </div>
-                    </div>
-
-                    <div class="card-actions">
-                        <button class="action-btn excellent" onclick="quickAnnotate(${item.id}, 'excellent')">
-                            <i class="fas fa-crown"></i> 极优
-                        </button>
-                        <button class="action-btn good" onclick="quickAnnotate(${item.id}, 'good')">
-                            <i class="fas fa-thumbs-up"></i> 次优
-                        </button>
-                        <button class="action-btn poor" onclick="quickAnnotate(${item.id}, 'poor')">
-                            <i class="fas fa-exclamation-triangle"></i> 劣质
-                        </button>
-                        <button class="action-btn discarded" onclick="quickAnnotate(${item.id}, 'discarded')">
-                            <i class="fas fa-trash"></i> 废弃
-                        </button>
-                        <button class="action-btn save" onclick="saveOutput(${item.id})">
-                            <i class="fas fa-save"></i> 保存
-                        </button>
-                        <button class="action-btn reset" onclick="resetOutput(${item.id})">
-                            <i class="fas fa-undo"></i> 还原
-                        </button>
-                    </div>
-
-                    <div class="card-footer">
-                        ${lastUpdate}
-                    </div>
-                `;
+                const card = createCardElement(item);
 
                 grid.appendChild(card);
             });
@@ -1147,6 +1060,99 @@
                 });
         }
 
+        // 创建卡片元素
+        function createCardElement(item) {
+            const card = document.createElement('div');
+            card.className = `preview-card ${item.quality}`;
+            card.dataset.id = item.id;
+
+            // 获取对话历史预览
+            const historyPreview = formatHistoryPreview(item.history);
+
+            // 格式化时间
+            let lastUpdate = '未更新';
+            if (item.modify_timestamp) {
+                lastUpdate = `修改: ${formatTime(item.modify_timestamp)}`;
+            } else if (item.annotate_timestamp) {
+                lastUpdate = `标注: ${formatTime(item.annotate_timestamp)}`;
+            }
+
+            // 准备输出内容（如果搜索词存在，应用高亮）
+            let outputDisplay = escapeHtml(item.output);
+            if (currentSearch) {
+                outputDisplay = highlightText(outputDisplay, currentSearch);
+            }
+
+            card.innerHTML = `
+                <div class="card-update-indicator">
+                    <i class="fas fa-spinner fa-spin"></i> 更新中
+                </div>
+
+                <div class="card-header">
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        <input type="checkbox" class="batch-checkbox card-select"
+                               onchange="toggleItemSelection(${item.id})"
+                               ${selectedItems.has(item.id) ? 'checked' : ''}>
+                        <span class="sample-id">ID: ${item.id}</span>
+                    </div>
+                    <div>
+                        <span class="annotation-badge">${getQualityText(item.quality)}</span>
+                    </div>
+                </div>
+
+                <div class="status-indicators">
+                    ${item.is_modified ? '<span class="status-indicator modified"><i class="fas fa-edit"></i> 已修改</span>' : ''}
+                    ${item.is_annotated ? '<span class="status-indicator annotated"><i class="fas fa-tag"></i> 已标注</span>' : ''}
+                </div>
+
+                <div class="preview-section">
+                    <h4><i class="fas fa-history"></i> 对话历史预览</h4>
+                    <div class="history-preview" onclick="showHistory(${item.id})" style="cursor: pointer;">
+                        ${escapeHtml(historyPreview)}
+                    </div>
+                </div>
+
+                <div class="preview-section">
+                    <h4><i class="fas fa-comment-dots"></i> 输出内容</h4>
+                    <div class="output-edit-container">
+                        <textarea
+                            class="output-editor-preview"
+                            id="output-editor-${item.id}"
+                            placeholder="在此编辑输出内容..."
+                            spellcheck="false"
+                            oninput="autoResizeTextarea(this)"
+                            data-original="${escapeHtml(item.output)}">${escapeHtml(item.output)}</textarea>
+                    </div>
+                </div>
+
+                <div class="card-actions">
+                    <button class="action-btn excellent" onclick="quickAnnotate(${item.id}, 'excellent')">
+                        <i class="fas fa-crown"></i> 极优
+                    </button>
+                    <button class="action-btn good" onclick="quickAnnotate(${item.id}, 'good')">
+                        <i class="fas fa-thumbs-up"></i> 次优
+                    </button>
+                    <button class="action-btn poor" onclick="quickAnnotate(${item.id}, 'poor')">
+                        <i class="fas fa-exclamation-triangle"></i> 劣质
+                    </button>
+                    <button class="action-btn discarded" onclick="quickAnnotate(${item.id}, 'discarded')">
+                        <i class="fas fa-trash"></i> 废弃
+                    </button>
+                    <button class="action-btn save" onclick="saveOutput(${item.id})">
+                        <i class="fas fa-save"></i> 保存
+                    </button>
+                    <button class="action-btn reset" onclick="resetOutput(${item.id})">
+                        <i class="fas fa-undo"></i> 还原
+                    </button>
+                </div>
+
+                <div class="card-footer">
+                    ${lastUpdate}
+                </div>
+            `;
+            return card;
+        }
+
         // 渲染更多项目
         function renderMoreItems(items) {
             const grid = document.getElementById('preview-grid');
@@ -1157,13 +1163,7 @@
                     return;
                 }
 
-                const card = document.createElement('div');
-                card.className = `preview-card ${item.quality}`;
-                card.dataset.id = item.id;
-
-                // 与renderPreviewGrid相同的渲染逻辑...
-                // 这里简化处理，实际应该重用renderPreviewGrid的逻辑
-                card.innerHTML = `...`; // 简化的HTML
+                const card = createCardElement(item);
                 grid.appendChild(card);
             });
         }
